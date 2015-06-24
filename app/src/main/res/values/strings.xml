@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Ishi</string>
+    <string name="use_message">Hi there! There\'s nothing here right now, but that\'s normal! Ishi should be working on its own without opening this app. Thanks for installing!</string>
+    <string name="action_settings">Settings</string>
+</resources>
