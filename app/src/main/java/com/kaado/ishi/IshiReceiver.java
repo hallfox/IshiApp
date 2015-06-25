@@ -1,12 +1,21 @@
 package com.kaado.ishi;
 
+import android.content.ContentProviderClient;
 import android.content.Context;
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.RemoteException;
 import android.util.Log;
 
 import com.getpebble.android.kit.PebbleKit;
 import com.getpebble.android.kit.PebbleKit.PebbleDataReceiver;
 import com.getpebble.android.kit.util.PebbleDictionary;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.HashMap;
 import java.util.UUID;
 
 /**
@@ -55,11 +64,14 @@ public class IshiReceiver extends PebbleDataReceiver
     public void receiveData(Context context, int transactionId, PebbleDictionary data)
     {
         PebbleKit.sendAckToPebble(context, transactionId);
+        Log.d(TAG, "Received Ack from pebble.");
+
 
         // Handle incoming request for getting the user's decks
         if (data.getString(KEY_DECKS) != null)
         {
             final String deck = data.getString(KEY_DECKS);
+
         }
         // Handles answer to the current card and sends out a new question
         if (data.getInteger(KEY_EASE) != null)
@@ -73,6 +85,56 @@ public class IshiReceiver extends PebbleDataReceiver
             final int action = data.getInteger(KEY_ACTION).intValue();
             switch (action)
             {
+                case ACTION_DECK_SELECT:
+                    Log.i(TAG, "Asking for decks...");
+                    // Getting the content provider from AnkiDroid
+                    Uri ankiURI = Uri.parse("content://com.ichi2.anki.flashcards/decks");
+                    try
+                    {
+                        ContentProviderClient ankiClient = context.getContentResolver()
+                                .acquireContentProviderClient(Constants.Deck.CONTENT_ALL_URI);
+                        Cursor decksCursor = ankiClient.query(Constants.Deck.CONTENT_ALL_URI, null, null, null, null);
+                        if (decksCursor.moveToFirst())
+                        {
+                            HashMap<Long, String> decks = new HashMap<Long, String>();
+                            do
+                            {
+                                long deckID = decksCursor.getLong(decksCursor.getColumnIndex(Constants.Deck.DECK_ID));
+                                String deckName = decksCursor.getString(decksCursor.getColumnIndex(Constants.Deck.DECK_NAME));
+                                try
+                                {
+                                    JSONObject deckOptions = new JSONObject(decksCursor.getString(decksCursor.getColumnIndex(Constants.Deck.OPTIONS)));
+                                    JSONArray deckCounts = new JSONArray(decksCursor.getString(decksCursor.getColumnIndex(Constants.Deck.DECK_COUNTS)));
+                                } catch (JSONException e)
+                                {
+                                    e.printStackTrace();
+                                }
+                                decks.put(deckID, deckName);
+                            } while (decksCursor.moveToNext());
+                            Log.d(TAG, "Deck names: ");
+                            for (String deck: decks.values())
+                            {
+                                Log.d(TAG, deck);
+                            }
+                            PebbleDictionary message = new PebbleDictionary();
+
+                            String msg = "";
+                            for (String s: decks.values())
+                            {
+                                if (s.equals("Default")) continue;
+                                msg += s + ";";
+                            }
+                            message.addString(KEY_DECKS, msg);
+                            PebbleKit.sendDataToPebble(context, WATCHAPP_UUID, message);
+                        }
+                    }
+                    catch (RemoteException e)
+                    {
+                        Log.e(TAG, "Failed to connect to Anki ContentProvider.");
+                    }
+
+                    break;
+
                 default:
                     Log.d(TAG, "Unrecognized action.");
             }
